@@ -1,11 +1,11 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const { MongoClient, ObjectId } = require("mongodb");
 require("dotenv").config();
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+mongoose.connect("mongodb://localhost:27017/exercise-tracker");
 const UserSchema = new Schema({
   username: String,
 });
@@ -41,7 +41,6 @@ app.get("/api/users", async (req, res) => {
 });
 app.post("/api/users/:_id/exercises", async (req, res) => {
   const user = await User.findById({ _id: req.params._id });
-  console.log(user);
   const exerciseObj = await Exercise({
     user_id: user._id,
     duration: +req.body.duration,
@@ -49,124 +48,52 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     description: req.body.description,
   });
   const exercise = await exerciseObj.save();
-  delete exercise.user_id;
   res.json({
-    ...exercise,
+    _id: exercise.user_id,
+    username: user.username,
+    description: exercise.description,
+    duration: exercise.duration,
     date: exercise.date.toDateString(),
   });
 });
 
-// app.get("/api/users/:_id/logs", async (req, res) => {
-//   // const { limit } = req.query;
-//   const to = req.query.to ? new Date(req.query.to) : new Date(8640000000000000);
-//   const from = req.query.from
-//     ? new Date(req.query.from)
-//     : new Date(-8640000000000000);
-//   // console.log(new Date(undefined));
-//   let date = {};
-//   if (to) {
-//     date.$lte = to;
-//   }
-//   if (from) {
-//     date.$gte = from;
-//   }
+app.get("/api/users/:_id/logs", async (req, res) => {
+  const { limit } = req.query;
+  let dateObj = {};
+  const { to, from } = req.query;
+  if (to) {
+    dateObj.$lte = new Date(to);
+  }
+  if (from) {
+    dateObj.$gte = new Date(from);
+  }
+  const user = await User.findById({
+    _id: req.params._id,
+  });
+  let filter = {
+    user_id: user._id,
+  };
+  if (from || to) {
+    filter.date = dateObj;
+  }
 
-//   const userActivitiesList = await users
-//     .find({
-//       _id: new ObjectId(req.params._id),
-//     })
-//     .toArray();
-//   // .limit(+limit)
-//   // if (from || to) {
-//   //   userActivitiesList
-//   //     .filter({
-//   //       date,
-//   //     })
-//   //     .toArray();
-//   // }
-//   // userActivitiesList.toArray();
-//   const { username, _id } = userActivitiesList[0];
-//   const newList = userActivitiesList
-//     .filter((item) => {
-//       if (new Date(item.date) >= from && new Date(item.date) <= to) {
-//         return item;
-//       }
-//     })
-//     .map((item) => {
-//       delete item._id;
-//       delete item.username;
-//       return item;
-//     });
-
-//   const result = {
-//     username,
-//     _id,
-//     count: userActivitiesList.length,
-//     log: [...newList],
-//   };
-//   // console.log(result);
-//   res.json(result);
-//   // if (limit) {
-//   //   console.log("has limit");
-//   //   const userActivitiesList = await users
-//   //     .find({
-//   //       _id: new ObjectId(req.params._id),
-//   //     })
-//   //     .limit(+limit)
-//   //     .toArray();
-//   //   const { username, _id } = userActivitiesList[0];
-//   //   const newList = userActivitiesList
-//   //     .filter((item) => {
-//   //       if (new Date(item.date) >= from && new Date(item.date) <= to) {
-//   //         return item;
-//   //       }
-//   //     })
-//   //     .map((item) => {
-//   //       delete item._id;
-//   //       delete item.username;
-//   //       return item;
-//   //     });
-
-//   //   const result = {
-//   //     username,
-//   //     _id,
-//   //     count: userActivitiesList.length,
-//   //     log: [...newList],
-//   //   };
-//   //   console.log(result);
-//   //   res.json(result);
-//   // } else {
-//   //   const userActivitiesList = await users
-//   //     .find({
-//   //       _id: new ObjectId(req.params._id),
-//   //     })
-//   //     .toArray();
-//   //   const { username, _id } = userActivitiesList[0];
-//   //   const newList = userActivitiesList
-//   //     .filter((item) => {
-//   //       if (new Date(item.date) <= from) {
-//   //         console.log(true);
-//   //         return item;
-//   //       } else {
-//   //         console.log(false);
-//   //       }
-//   //     })
-//   //     .map((item) => {
-//   //       delete item._id;
-//   //       delete item.username;
-//   //       return item;
-//   //     });
-
-//   //   const result = {
-//   //     username,
-//   //     _id,
-//   //     count: userActivitiesList.length,
-//   //     log: [...newList],
-//   //   };
-//   //   console.log(result);
-//   //   res.json(result);
-//   // }
-// });
+  const exercises = await Exercise.find(filter)
+    .limit(+limit ?? 1000)
+    .select({ duration: 1, date: 1, description: 1 })
+    .lean();
+  const log = exercises.map((item) => {
+    item.date = item.date.toDateString();
+    delete item._id;
+    return item;
+  });
+  const result = {
+    username: user.username,
+    _id: user._id,
+    count: exercises.length,
+    log,
+  };
+  res.json(result);
+});
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log("Your app is listening on port " + listener.address().port);
