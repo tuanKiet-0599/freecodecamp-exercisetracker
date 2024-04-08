@@ -36,7 +36,7 @@ app.post("/api/users", async (req, res) => {
   res.json(user);
 });
 app.get("/api/users", async (req, res) => {
-  const usersList = await User.find();
+  const usersList = await User.find({});
   res.send(usersList);
 });
 app.post("/api/users/:_id/exercises", async (req, res) => {
